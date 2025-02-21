@@ -3,13 +3,10 @@ use solana_cli_config::{CONFIG_FILE, Config};
 use solana_client::rpc_client::RpcClient;
 
 use solana_sdk::{
-    signature::{keypair, Keypair, Signer}, 
-    system_instruction,
-    program_pack::Pack,
+    signature::{Signer, keypair},
+    pubkey::Pubkey, 
     transaction::Transaction
 };
-
-use spl_token_2022::state::Mint;
 
 fn main() {
     let config_file = CONFIG_FILE.as_ref().unwrap();
@@ -19,35 +16,31 @@ fn main() {
 
     let payer = keypair::read_keypair_file(config.keypair_path).unwrap();
 
-    let mint = Keypair::new();
+    let mint = Pubkey::from_str_const("mint account address");
 
-    let rent_lamports = client.get_minimum_balance_for_rent_exemption(Mint::LEN).unwrap();
-
-    let create_account_ix = system_instruction::create_account(
+    let ata = spl_associated_token_account::get_associated_token_address_with_program_id(
         &payer.pubkey(), 
-        &mint.pubkey(), 
-        rent_lamports, 
-        Mint::LEN as u64, 
+        &mint, 
         &spl_token_2022::ID
     );
 
-    let initialize_mint_ix = spl_token_2022::instruction::initialize_mint2(
-        &spl_token_2022::ID, 
-        &mint.pubkey(), 
+    let mint_ix = spl_token_2022::instruction::mint_to(
+    &spl_token_2022::ID, 
+        &mint, 
+        &ata, 
         &payer.pubkey(), 
-        Some(&payer.pubkey()), 
-        2
+        &[], 
+        10000
     ).unwrap();
 
     let tx = Transaction::new_signed_with_payer(
-        &[create_account_ix, initialize_mint_ix], 
+        &[mint_ix], 
         Some(&payer.pubkey()), 
-        &[&payer, &mint], 
+        &[&payer], 
         client.get_latest_blockhash().unwrap()
     );
 
     let tx_signature = client.send_and_confirm_transaction_with_spinner(&tx).unwrap();
 
     println!("tx signature: {}", tx_signature);
-    println!("mint account: {}", mint.pubkey());
 }
